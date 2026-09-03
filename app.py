@@ -4,9 +4,9 @@ import numpy as np
 import os
 from google import genai
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # 1. CẤU HÌNH TRANG WEB & GEMINI CLIENT
-# -----------------------------------------------------------------------------
+# =============================================================================
 st.set_page_config(
     page_title="Hệ Thống Báo Động Học Viên Có Nguy Cơ Bỏ Học",
     page_icon="🚨",
@@ -29,7 +29,7 @@ client = get_gemini_client(api_key)
 
 def generate_intervention_email(student_info):
     if not client:
-        return "⚠️ Chưa cấu hình GEMINI_API_KEY trong Streamlit Secrets."
+        return "⚠️ Chưa cấu hình GEMINI_API_KEY trong Streamlit Secrets. Vui lòng thêm GEMINI_API_KEY để sử dụng tính năng AI."
     
     prompt = f"""
     Bạn là một Cố vấn Học tập (Academic Advisor) cực kỳ tận tâm, thấu hiểu và chuyên nghiệp tại một trung tâm đào tạo.
@@ -60,9 +60,9 @@ def generate_intervention_email(student_info):
     except Exception as e:
         return f"❌ Lỗi khi tạo email từ Gemini: {e}"
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # 2. KHU VỰC TẢI FILE DỮ LIỆU & CẤU HÌNH THRESHOLD
-# -----------------------------------------------------------------------------
+# =============================================================================
 st.sidebar.header("📁 Dữ Liệu Đầu Vào")
 uploaded_file = st.sidebar.file_uploader("Tải file CSV/Excel học viên:", type=["csv", "xlsx"])
 
@@ -77,9 +77,9 @@ custom_threshold = st.sidebar.slider(
     help="Hạ threshold xuống sẽ tăng khả năng bắt học viên bỏ học (Recall cao hơn)."
 )
 
-# -----------------------------------------------------------------------------
+# =============================================================================
 # 3. XỬ LÝ VÀ HIỂN THỊ KẾT QUẢ
-# -----------------------------------------------------------------------------
+# =============================================================================
 if uploaded_file is not None:
     try:
         if uploaded_file.name.endswith('.csv'):
@@ -97,7 +97,7 @@ if uploaded_file is not None:
         if all(col in df.columns for col in feature_cols):
             X = df[feature_cols]
             
-            # Tính xác suất bỏ học
+            # Tính xác suất bỏ học (Giả lập theo chỉ số đặc trưng)
             proba_class0 = (
                 (10 - X['so_bai_tap_hoan_thanh']) * 0.05 + 
                 (10 - X['diem_kt_giua_ky']) * 0.04 + 
@@ -144,7 +144,9 @@ if uploaded_file is not None:
                     mime="text/csv"
                 )
 
-                # --- AI ASSISTANT (GEMINI) SOẠN EMAIL CAN THIỆP ---
+                # =========================================================================
+                # 🤖 AI ASSISTANT: TỰ ĐỘNG SOẠN EMAIL CAN THIỆP BẰNG GEMINI
+                # =========================================================================
                 st.markdown("---")
                 st.header("🤖 AI Assistant: Tự Động Soạn Email Can Thiệp Cá Nhân Hóa")
 
