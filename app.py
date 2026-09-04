@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import re
 from google import genai
 
 # =============================================================================
@@ -78,6 +79,19 @@ custom_threshold = st.sidebar.slider(
     help="Hạ threshold xuống sẽ tăng khả năng bắt học viên bỏ học (Recall cao hơn)."
 )
 
+# Hàm hỗ trợ chuẩn hóa tên cột để ghép nối linh hoạt
+def normalize_string(s):
+    s = str(s).lower().strip()
+    s = re.sub(r'[àáạảãâầấậẩẫăằắặẳẵ]', 'a', s)
+    s = re.sub(r'[èéẹẻẽêềếệểễ]', 'e', s)
+    s = re.sub(r'[ìíịỉĩ]', 'i', s)
+    s = re.sub(r'[òóọỏõôồốộổỗơờớợởỡ]', 'o', s)
+    s = re.sub(r'[ùúụủũưừứựửữ]', 'u', s)
+    s = re.sub(r'[ỳýỵỷỹ]', 'y', s)
+    s = re.sub(r'[đ]', 'd', s)
+    s = re.sub(r'[^a-z0-9]', '', s)
+    return s
+
 # =============================================================================
 # 3. XỬ LÝ VÀ HIỂN THỊ KẾT QUẢ
 # =============================================================================
@@ -90,20 +104,40 @@ if uploaded_file is not None:
             
         st.success(f"Tải thành công {len(df)} bản ghi học viên!")
         
-        with st.expander("👀 Xem dữ liệu gốc"):
+        # Ánh xạ thông minh tên cột
+        column_map = {}
+        for col in df.columns:
+            norm_col = normalize_string(col)
+            if 'id' in norm_col or 'ma' in norm_col:
+                column_map[col] = 'Mã ID'
+            elif 'ten' in norm_col or 'ho' in norm_col or 'name' in norm_col:
+                column_map[col] = 'Họ Và Tên Học Viên'
+            elif 'baitap' in norm_col or 'exercise' in norm_col or 'assignment' in norm_col:
+                column_map[col] = 'Số Bài Tập Hoàn Thành'
+            elif 'diem' in norm_col or 'kt' in norm_col or 'score' in norm_col or 'midterm' in norm_col:
+                column_map[col] = 'Điểm Kiểm Tra Giữa Kỳ'
+            elif 'ngay' in norm_col or 'dihoc' in norm_col or 'attendance' in norm_col or 'day' in norm_col or 'gio' in norm_col:
+                column_map[col] = 'Số Ngày Đi Học'
+            elif 'hocphi' in norm_col or 'phi' in norm_col or 'fee' in norm_col or 'tuition' in norm_col:
+                column_map[col] = 'Tình Trạng Học Phí'
+
+        # Đổi tên cột trong dataframe về chuẩn
+        df = df.rename(columns=column_map)
+
+        with st.expander("👀 Xem dữ liệu gốc đã chuẩn hóa tiêu đề"):
             st.dataframe(df.head())
 
-        # Cập nhật danh sách tiêu đề cột tiếng Việt mới
-        feature_cols = ['Số Bài Tập Hoàn Thành', 'Điểm Kiểm Tra Giữa Kỳ', 'Số Ngày Đi Học', 'Tình Trạng Học Phí']
+        required_cols = ['Số Bài Tập Hoàn Thành', 'Điểm Kiểm Tra Giữa Kỳ', 'Số Ngày Đi Học', 'Tình Trạng Học Phí']
+        missing_cols = [c for c in required_cols if c not in df.columns]
         
-        if all(col in df.columns for col in feature_cols):
-            X = df[feature_cols]
+        if not missing_cols:
+            X = df[required_cols]
             
-            # Tính xác suất bỏ học dựa trên các đặc trưng mới (Thang 30 ngày đi học)
+            # Tính xác suất bỏ học
             proba_class0 = (
-                (10 - X['Số Bài Tập Hoàn Thành']) * 0.05 + 
-                (10 - X['Điểm Kiểm Tra Giữa Kỳ']) * 0.04 + 
-                (30 - X['Số Ngày Đi Học']) * 0.01
+                (10 - pd.to_numeric(X['Số Bài Tập Hoàn Thành'], errors='coerce').fillna(0)) * 0.05 + 
+                (10 - pd.to_numeric(X['Điểm Kiểm Tra Giữa Kỳ'], errors='coerce').fillna(0)) * 0.04 + 
+                (30 - pd.to_numeric(X['Số Ngày Đi Học'], errors='coerce').fillna(0)) * 0.01
             ).clip(0.05, 0.95)
 
             df['Xác Suất Bỏ Học'] = (proba_class0 * 100).round(1)
@@ -154,7 +188,6 @@ if uploaded_file is not None:
 
                 student_list = df_at_risk.index.tolist()
                 
-                # Hàm hiển thị tên học viên rõ ràng trong menu chọn
                 def get_student_label(idx):
                     row = df_at_risk.loc[idx]
                     student_id = row.get('Mã ID', f'HV{idx}')
@@ -177,9 +210,9 @@ if uploaded_file is not None:
                     st.write(f"**Mã ID:** `{student_data.get('Mã ID', 'N/A')}`")
                     st.write(f"**Họ và tên:** `{student_data.get('Họ Và Tên Học Viên', 'N/A')}`")
                     st.write(f"**Xác suất bỏ học:** `{student_data['Xác Suất Bỏ Học']}%`")
-                    st.write(f"**Bài tập hoàn thành:** `{student_data['Số Bài Tập Hoàn Thành']}/10`")
-                    st.write(f"**Điểm giữa kỳ:** `{student_data['Điểm Kiểm Tra Giữa Kỳ']}`")
-                    st.write(f"**Số ngày đi học:** `{student_data['Số Ngày Đi Học']}/30 ngày`")
+                    st.write(f"**Bài tập hoàn thành:** `{student_data.get('Số Bài Tập Hoàn Thành', 0)}/10`")
+                    st.write(f"**Điểm giữa kỳ:** `{student_data.get('Điểm Kiểm Tra Giữa Kỳ', 0)}`")
+                    st.write(f"**Số ngày đi học:** `{student_data.get('Số Ngày Đi Học', 0)}/30 ngày`")
                     
                     btn_generate = st.button("✨ Viết Email Bằng Gemini AI", type="primary", use_container_width=True)
 
@@ -215,7 +248,8 @@ if uploaded_file is not None:
                 st.success("Tuyệt vời! Không có học viên nào vượt ngưỡng nguy cơ bỏ học.")
 
         else:
-            st.error(f"File thiếu các cột thuộc tính cần thiết: {feature_cols}")
+            st.error(f"❌ File thiếu hoặc chưa nhận diện được các cột thuộc tính sau: {missing_cols}")
+            st.info("💡 Các cột trong file của bạn gồm: " + ", ".join([f"`{c}`" for c in df.columns]))
 
     except Exception as e:
         st.error(f"Đã xảy ra lỗi khi đọc file: {e}")
