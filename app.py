@@ -35,18 +35,19 @@ def generate_intervention_email(student_info):
     Bạn là một Cố vấn Học tập (Academic Advisor) cực kỳ tận tâm, thấu hiểu và chuyên nghiệp tại một trung tâm đào tạo.
     
     Thông tin học viên cần can thiệp:
-    - Họ và tên / Mã HV: {student_info.get('Ten_Hoc_Vien', 'Học viên')}
-    - Xác suất bỏ học dự đoán: {student_info.get('Xac_Suat_Bo_Hoc')}%
-    - Số bài tập đã hoàn thành: {student_info.get('so_bai_tap_hoan_thanh')}/10 bài
-    - Điểm kiểm tra giữa kỳ: {student_info.get('diem_kt_giua_ky')}/10
-    - Số giờ học trung bình/tuần: {student_info.get('gio_hoc_tuan')} giờ
-    - Tình trạng học phí: {"Đã đóng đủ" if student_info.get('da_dong_hoc_phi_day_du') == 1 else "Chưa đóng đủ"}
+    - Mã ID: {student_info.get('Mã ID', 'N/A')}
+    - Họ và tên: {student_info.get('Họ Và Tên Học Viên', 'Học viên')}
+    - Xác suất bỏ học dự đoán: {student_info.get('Xác Suất Bỏ Học')}%
+    - Số bài tập đã hoàn thành: {student_info.get('Số Bài Tập Hoàn Thành')}/10 bài
+    - Điểm kiểm tra giữa kỳ: {student_info.get('Điểm Kiểm Tra Giữa Kỳ')}/10
+    - Số ngày đi học: {student_info.get('Số Ngày Đi Học')}/30 ngày
+    - Tình trạng học phí: {"Đã đóng đủ" if student_info.get('Tình Trạng Học Phí') == 1 else "Chưa đóng đủ"}
 
     Nhiệm vụ:
     Hãy viết 1 bức email gửi cho học viên này.
     Yêu cầu về nội dung & văn phong:
     1. Giọng văn: Ấm áp, chân thành, động viên, tuyệt đối KHÔNG chỉ trích hay gây áp lực.
-    2. Chỉ ra khéo léo điểm cần hỗ trợ (ví dụ: thiếu bài tập, điểm giữa kỳ chưa như ý, hoặc thời gian học bị giảm).
+    2. Chỉ ra khéo léo điểm cần hỗ trợ (ví dụ: thiếu bài tập, điểm giữa kỳ chưa như ý, hoặc số ngày đi học bị giảm).
     3. Đưa ra giải pháp cụ thể: Đề xuất 1 buổi tư vấn 1-1 với Trợ giảng hoặc linh hoạt gia hạn bài tập.
     4. Độ dài: Ngắn gọn (khoảng 150 - 250 từ), có Tiêu đề Email (Subject) rõ ràng.
     """
@@ -66,13 +67,13 @@ def generate_intervention_email(student_info):
 st.sidebar.header("📁 Dữ Liệu Đầu Vào")
 uploaded_file = st.sidebar.file_uploader("Tải file CSV/Excel học viên:", type=["csv", "xlsx"])
 
-OPTIMAL_THRESHOLD_CLASS0 = 0.30
+OPTIMAL_THRESHOLD = 0.30
 
 custom_threshold = st.sidebar.slider(
     "Ngưỡng xác suất cảnh báo (Threshold):",
     min_value=0.1,
     max_value=0.9,
-    value=OPTIMAL_THRESHOLD_CLASS0,
+    value=OPTIMAL_THRESHOLD,
     step=0.05,
     help="Hạ threshold xuống sẽ tăng khả năng bắt học viên bỏ học (Recall cao hơn)."
 )
@@ -92,20 +93,21 @@ if uploaded_file is not None:
         with st.expander("👀 Xem dữ liệu gốc"):
             st.dataframe(df.head())
 
-        feature_cols = ['so_bai_tap_hoan_thanh', 'diem_kt_giua_ky', 'gio_hoc_tuan', 'da_dong_hoc_phi_day_du']
+        # Cập nhật danh sách tiêu đề cột tiếng Việt mới
+        feature_cols = ['Số Bài Tập Hoàn Thành', 'Điểm Kiểm Tra Giữa Kỳ', 'Số Ngày Đi Học', 'Tình Trạng Học Phí']
         
         if all(col in df.columns for col in feature_cols):
             X = df[feature_cols]
             
-            # Tính xác suất bỏ học (Giả lập theo chỉ số đặc trưng)
+            # Tính xác suất bỏ học dựa trên các đặc trưng mới (Thang 30 ngày đi học)
             proba_class0 = (
-                (10 - X['so_bai_tap_hoan_thanh']) * 0.05 + 
-                (10 - X['diem_kt_giua_ky']) * 0.04 + 
-                (15 - X['gio_hoc_tuan']) * 0.02
+                (10 - X['Số Bài Tập Hoàn Thành']) * 0.05 + 
+                (10 - X['Điểm Kiểm Tra Giữa Kỳ']) * 0.04 + 
+                (30 - X['Số Ngày Đi Học']) * 0.01
             ).clip(0.05, 0.95)
 
-            df['Xac_Suat_Bo_Hoc'] = (proba_class0 * 100).round(1)
-            df['Trang_Thai_Canh_Bao'] = np.where(proba_class0 >= custom_threshold, "⚠️ Có Nguy Cơ Bỏ Học", "✅ An Toàn")
+            df['Xác Suất Bỏ Học'] = (proba_class0 * 100).round(1)
+            df['Trạng Thái Cảnh Báo'] = np.where(proba_class0 >= custom_threshold, "⚠️ Có Nguy Cơ Bỏ Học", "✅ An Toàn")
 
             # --- METRICS THỐNG KÊ ---
             total_students = len(df)
@@ -122,14 +124,14 @@ if uploaded_file is not None:
             # --- BẢNG DANH SÁCH HỌC VIÊN NGUY CƠ CAO ---
             st.subheader("📌 Danh Sách Học Viên Cần Can Thiệp Gấp")
             
-            df_at_risk = df[df['Trang_Thai_Canh_Bao'] == "⚠️ Có Nguy Cơ Bỏ Học"].sort_values(
-                by="Xac_Suat_Bo_Hoc", ascending=False
+            df_at_risk = df[df['Trạng Thái Cảnh Báo'] == "⚠️ Có Nguy Cơ Bỏ Học"].sort_values(
+                by="Xác Suất Bỏ Học", ascending=False
             )
 
             if len(df_at_risk) > 0:
                 st.dataframe(
                     df_at_risk.style.highlight_between(
-                        subset=['Xac_Suat_Bo_Hoc'], 
+                        subset=['Xác Suất Bỏ Học'], 
                         left=custom_threshold*100, 
                         right=100, 
                         color='#ffcccc'
@@ -151,23 +153,33 @@ if uploaded_file is not None:
                 st.header("🤖 AI Assistant: Tự Động Soạn Email Can Thiệp Cá Nhân Hóa")
 
                 student_list = df_at_risk.index.tolist()
+                
+                # Hàm hiển thị tên học viên rõ ràng trong menu chọn
+                def get_student_label(idx):
+                    row = df_at_risk.loc[idx]
+                    student_id = row.get('Mã ID', f'HV{idx}')
+                    name = row.get('Họ Và Tên Học Viên', f'Học viên {idx}')
+                    risk = row['Xác Suất Bỏ Học']
+                    return f"[{student_id}] {name} - Nguy cơ: {risk}%"
+
                 selected_idx = st.selectbox(
                     "🎯 Chọn học viên cần gửi email can thiệp:", 
                     options=student_list,
-                    format_func=lambda x: f"Học viên ID {x} - Risk: {df_at_risk.loc[x, 'Xac_Suat_Bo_Hoc']}% (Bài tập: {df_at_risk.loc[x, 'so_bai_tap_hoan_thanh']}/10, Điểm: {df_at_risk.loc[x, 'diem_kt_giua_ky']})"
+                    format_func=get_student_label
                 )
 
                 student_data = df_at_risk.loc[selected_idx].to_dict()
-                student_data['Ten_Hoc_Vien'] = f"Học viên #{selected_idx}"
 
                 col_info, col_ai = st.columns([1, 2])
 
                 with col_info:
                     st.subheader("📋 Phân Tích Chỉ Số")
-                    st.write(f"**Xác suất bỏ học:** `{student_data['Xac_Suat_Bo_Hoc']}%`")
-                    st.write(f"**Bài tập hoàn thành:** `{student_data['so_bai_tap_hoan_thanh']}/10`")
-                    st.write(f"**Điểm giữa kỳ:** `{student_data['diem_kt_giua_ky']}`")
-                    st.write(f"**Giờ học/tuần:** `{student_data['gio_hoc_tuan']}h`")
+                    st.write(f"**Mã ID:** `{student_data.get('Mã ID', 'N/A')}`")
+                    st.write(f"**Họ và tên:** `{student_data.get('Họ Và Tên Học Viên', 'N/A')}`")
+                    st.write(f"**Xác suất bỏ học:** `{student_data['Xác Suất Bỏ Học']}%`")
+                    st.write(f"**Bài tập hoàn thành:** `{student_data['Số Bài Tập Hoàn Thành']}/10`")
+                    st.write(f"**Điểm giữa kỳ:** `{student_data['Điểm Kiểm Tra Giữa Kỳ']}`")
+                    st.write(f"**Số ngày đi học:** `{student_data['Số Ngày Đi Học']}/30 ngày`")
                     
                     btn_generate = st.button("✨ Viết Email Bằng Gemini AI", type="primary", use_container_width=True)
 
@@ -187,10 +199,11 @@ if uploaded_file is not None:
                         
                         c1, c2 = st.columns(2)
                         with c1:
+                            student_id_str = student_data.get('Mã ID', f'HV_{selected_idx}')
                             st.download_button(
                                 label="📥 Tải file Email (.txt)",
                                 data=email_text,
-                                file_name=f"email_can_thiep_hv_{selected_idx}.txt",
+                                file_name=f"email_can_thiep_{student_id_str}.txt",
                                 mime="text/plain"
                             )
                         with c2:
