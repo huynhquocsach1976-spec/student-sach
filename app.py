@@ -35,7 +35,7 @@ def generate_intervention_email(student_info):
     Bạn là một Cố vấn Học tập (Academic Advisor) cực kỳ tận tâm, thấu hiểu và chuyên nghiệp tại một trung tâm đào tạo.
     
     Thông tin học viên cần can thiệp:
-    - Mã ID: {student_info.get('Mã ID', 'N/A')}
+    - Mã ID Học Viên: {student_info.get('Mã ID Học Viên', student_info.get('Mã ID', 'N/A'))}
     - Họ và tên: {student_info.get('Họ Và Tên Học Viên', 'Học viên')}
     - Xác suất bỏ học dự đoán: {student_info.get('Xác Suất Bỏ Học')}%
     - Số bài tập đã hoàn thành: {student_info.get('Số Bài Tập Hoàn Thành')}/10 bài
@@ -78,21 +78,34 @@ custom_threshold = st.sidebar.slider(
     help="Hạ threshold xuống sẽ tăng khả năng bắt học viên bỏ học (Recall cao hơn)."
 )
 
-# Bảng chuẩn hóa tiêu đề cột cố định (Tránh trùng lặp)
+# Bảng chuẩn hóa tiêu đề cột cố định (Đảm bảo chuẩn tiêu đề tiếng Việt rõ ràng)
 EXACT_RENAME_MAP = {
-    # Tên cột tiếng Việt mới
-    'Mã ID': 'Mã ID',
-    'Họ Và Tên Học Viên': 'Họ Và Tên Học Viên',
-    'Số Bài Tập Hoàn Thành': 'Số Bài Tập Hoàn Thành',
-    'Điểm Kiểm Tra Giữa Kỳ': 'Điểm Kiểm Tra Giữa Kỳ',
-    'Số Ngày Đi Học': 'Số Ngày Đi Học',
-    'Tình Trạng Học Phí': 'Tình Trạng Học Phí',
+    # Mã ID
+    'Mã ID': 'Mã ID Học Viên',
+    'Ma_ID': 'Mã ID Học Viên',
+    'ID': 'Mã ID Học Viên',
+    'Mã Học Viên': 'Mã ID Học Viên',
+    'Mã ID Học Viên': 'Mã ID Học Viên',
     
-    # Tên cột tiếng Anh / Viết tắt cũ (Trường hợp tải file cũ)
+    # Họ tên
+    'Họ Và Tên Học Viên': 'Họ Và Tên Học Viên',
     'Ten_Hoc_Vien': 'Họ Và Tên Học Viên',
+    'Họ và tên': 'Họ Và Tên Học Viên',
+    
+    # Số bài tập
+    'Số Bài Tập Hoàn Thành': 'Số Bài Tập Hoàn Thành',
     'so_bai_tap_hoan_thanh': 'Số Bài Tập Hoàn Thành',
+    
+    # Điểm kiểm tra
+    'Điểm Kiểm Tra Giữa Kỳ': 'Điểm Kiểm Tra Giữa Kỳ',
     'diem_kt_giua_ky': 'Điểm Kiểm Tra Giữa Kỳ',
+    
+    # Số ngày đi học
+    'Số Ngày Đi Học': 'Số Ngày Đi Học',
     'gio_hoc_tuan': 'Số Ngày Đi Học',
+    
+    # Học phí
+    'Tình Trạng Học Phí': 'Tình Trạng Học Phí',
     'da_dong_hoc_phi_day_du': 'Tình Trạng Học Phí'
 }
 
@@ -127,7 +140,6 @@ if uploaded_file is not None:
             ngay_di_hoc = pd.to_numeric(X['Số Ngày Đi Học'], errors='coerce').fillna(0)
 
             # Tính xác suất bỏ học
-            # Nếu giá trị ngay_di_hoc > 15 (thang 30 ngày) -> quy đổi trọng số tương ứng
             max_day = 30 if ngay_di_hoc.max() > 15 else 15
             proba_class0 = (
                 (10 - so_bt) * 0.05 + 
@@ -157,6 +169,11 @@ if uploaded_file is not None:
                 by="Xác Suất Bỏ Học", ascending=False
             )
 
+            # Đảm bảo cột 'Mã ID Học Viên' nằm đầu tiên trong bảng hiển thị
+            if 'Mã ID Học Viên' in df_at_risk.columns:
+                cols_order = ['Mã ID Học Viên'] + [col for col in df_at_risk.columns if col != 'Mã ID Học Viên']
+                df_at_risk = df_at_risk[cols_order]
+
             if len(df_at_risk) > 0:
                 st.dataframe(
                     df_at_risk.style.highlight_between(
@@ -164,7 +181,8 @@ if uploaded_file is not None:
                         left=custom_threshold*100, 
                         right=100, 
                         color='#ffcccc'
-                    )
+                    ),
+                    use_container_width=True
                 )
 
                 csv_data = df_at_risk.to_csv(index=False).encode('utf-8-sig')
@@ -185,7 +203,7 @@ if uploaded_file is not None:
                 
                 def get_student_label(idx):
                     row = df_at_risk.loc[idx]
-                    student_id = row.get('Mã ID', f'HV{idx+1:04d}')
+                    student_id = row.get('Mã ID Học Viên', row.get('Mã ID', f'HV{idx+1:04d}'))
                     name = row.get('Họ Và Tên Học Viên', f'Học viên {idx+1}')
                     risk = row['Xác Suất Bỏ Học']
                     return f"[{student_id}] {name} - Nguy cơ: {risk}%"
@@ -202,7 +220,7 @@ if uploaded_file is not None:
 
                 with col_info:
                     st.subheader("📋 Phân Tích Chỉ Số")
-                    st.write(f"**Mã ID:** `{student_data.get('Mã ID', f'HV{selected_idx+1:04d}')}`")
+                    st.write(f"**Mã ID Học Viên:** `{student_data.get('Mã ID Học Viên', student_data.get('Mã ID', f'HV{selected_idx+1:04d}'))}`")
                     st.write(f"**Họ và tên:** `{student_data.get('Họ Và Tên Học Viên', 'N/A')}`")
                     st.write(f"**Xác suất bỏ học:** `{student_data['Xác Suất Bỏ Học']}%`")
                     st.write(f"**Bài tập hoàn thành:** `{student_data.get('Số Bài Tập Hoàn Thành', 0)}/10`")
@@ -227,7 +245,7 @@ if uploaded_file is not None:
                         
                         c1, c2 = st.columns(2)
                         with c1:
-                            student_id_str = student_data.get('Mã ID', f'HV_{selected_idx+1}')
+                            student_id_str = student_data.get('Mã ID Học Viên', student_data.get('Mã ID', f'HV_{selected_idx+1}'))
                             st.download_button(
                                 label="📥 Tải file Email (.txt)",
                                 data=email_text,
@@ -244,7 +262,7 @@ if uploaded_file is not None:
 
         else:
             st.error(f"❌ File của bạn đang thiếu các cột sau: {missing_cols}")
-            st.info("💡 Vui lòng kiểm tra lại file Excel đảm bảo có đủ các cột: `Mã ID`, `Họ Và Tên Học Viên`, `Số Bài Tập Hoàn Thành`, `Điểm Kiểm Tra Giữa Kỳ`, `Số Ngày Đi Học`, `Tình Trạng Học Phí`")
+            st.info("💡 Vui lòng kiểm tra lại file Excel đảm bảo có đủ các cột: `Mã ID Học Viên`, `Họ Và Tên Học Viên`, `Số Bài Tập Hoàn Thành`, `Điểm Kiểm Tra Giữa Kỳ`, `Số Ngày Đi Học`, `Tình Trạng Học Phí`")
 
     except Exception as e:
         st.error(f"Đã xảy ra lỗi khi đọc file: {e}")
